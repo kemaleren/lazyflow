@@ -668,7 +668,7 @@ class Slot(object):
             request = Request( execWrapper )
 
             # We must decrement the execution count even if the request is cancelled
-            request.onCancel( execWrapper._decrementOperatorExecutionCount )
+            request.onCancel( execWrapper.handleCancel )
             return request
             
     class RequestExecutionWrapper(object):
@@ -691,17 +691,22 @@ class Slot(object):
             # We are executing the operator.
             # Incremement the execution count to protect against simultaneous setupOutputs() calls.
             self._incrementOperatorExecutionCount()
-            
-            # Execute the workload, which might not ever return (if we get cancelled).
-            result_op = self.operator.execute(self.slot, self.roi, destination)
-            
-            # legacy operators may return None and only
-            # write into destination; fix that case
-            result_op = result_op if not(result_op is None) else destination
 
-            # Decrement the execution count
-            self._decrementOperatorExecutionCount()
-            return result_op
+            try:
+                # Execute the workload, which might not ever return (if we get cancelled).
+                result_op = self.operator.execute(self.slot, self.roi, destination)
+            
+                # legacy operators may return None and only
+                # write into destination; fix that case
+                result_op = result_op if not(result_op is None) else destination
+
+                # Decrement the execution count
+                self._decrementOperatorExecutionCount()
+                return result_op
+            except: # except Request.CancellationException
+                # Decrement the execution count
+                self._decrementOperatorExecutionCount()
+                raise
 
         def _incrementOperatorExecutionCount(self):
             self.started = True
@@ -712,7 +717,15 @@ class Slot(object):
                     self.operator._condition.wait()
                 self.operator._executionCount += 1
     
-        def _decrementOperatorExecutionCount(self, *args):
+        def handleCancel(self, *args):
+            # The new request api does clean up by handling an exception,
+            #  not in this callback.
+            # Only clean up if we are using the old request api
+            using_old_api = len(args) > 0 and not hasattr(args[0], 'notify_cancelled')
+            if using_old_api:
+                self._decrementOperatorExecutionCount()
+    
+        def _decrementOperatorExecutionCount(self):
             # Must lock here because cancel callbacks are asynchronous.
             # (Perhaps it would be better if they were called from the worker thread instead...)
             with self.lock:
@@ -724,7 +737,6 @@ class Slot(object):
                     with self.operator._condition:
                         self.operator._executionCount -= 1
                         self.operator._condition.notifyAll()
-
 
     def setDirty(self, *args,**kwargs):
         """
