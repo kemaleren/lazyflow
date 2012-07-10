@@ -664,31 +664,36 @@ class Slot(object):
             assert self._type != "input", "This inputSlot has no value and no partner.  You can't ask for its data yet!"
             # normal (outputslot) case
             # --> construct heavy request object..
-            execWrapper = Slot.RequestExecutionWrapper( self )
-            request = Request( execWrapper, roi = roi, destination = destination )
+            execWrapper = Slot.RequestExecutionWrapper( self, roi, destination )
+            request = Request( execWrapper )
 
             # We must decrement the execution count even if the request is cancelled
             request.onCancel( execWrapper._decrementOperatorExecutionCount )
             return request
             
     class RequestExecutionWrapper(object):
-        def __init__(self, slot):
+        def __init__(self, slot, roi, destination):
             self.started = False
             self.finished = False
             self.slot = slot
             self.operator = slot.operator
             self.lock = threading.Lock()
+            self.roi = roi
+            self.destination = destination
 
-        def __call__(self, roi, destination):
+        def __call__(self, destination=None):
             if destination is None:
-                destination = self.slot.stype.allocateDestination(roi)
+                destination = self.destination
+
+            if destination is None:
+                destination = self.slot.stype.allocateDestination(self.roi)
 
             # We are executing the operator.
             # Incremement the execution count to protect against simultaneous setupOutputs() calls.
             self._incrementOperatorExecutionCount()
             
             # Execute the workload, which might not ever return (if we get cancelled).
-            result_op = self.operator.execute(self.slot, roi, destination)
+            result_op = self.operator.execute(self.slot, self.roi, destination)
             
             # legacy operators may return None and only
             # write into destination; fix that case

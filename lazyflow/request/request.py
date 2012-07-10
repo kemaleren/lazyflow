@@ -7,7 +7,7 @@ from threading import Thread, current_thread
 import thread
 import greenlet
 import threading
-from helpers import detectCPUs
+from lazyflow.helpers import detectCPUs
 import math
 import logging
 
