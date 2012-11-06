@@ -6,7 +6,7 @@ import cPickle as pickle
 
 class RoiMeta(type):
     """
-    Roi metaclass.  This mechanism automatically registers all roi 
+    Roi metaclass.  This mechanism automatically registers all roi
     subclasses for string serialization via Roi._registerSubclass.
     """
     def __new__(cls, name, bases, classDict):
@@ -38,7 +38,7 @@ class Roi(object):
         Subclasses may override this and _fromString for more human-friendly string representations.
         """
         return pickle.dumps(roi)
-    
+
     @staticmethod
     def _fromString(s):
         """
@@ -64,9 +64,11 @@ class Everything(Roi):
     pass
 
 class List(Roi):
-    def __init__(self, slot, iterable=()):
+    def __init__(self, slot, iterable=(), pslice=None):
         super(List, self).__init__(slot)
         self._l = list(iterable)
+        if pslice is not None:
+            self._l = [pslice]
     def __iter__( self ):
         return iter(self._l)
     def __len__( self ):
@@ -74,7 +76,7 @@ class List(Roi):
     def __str__( self ):
         return str(self._l)
 
-    
+
 class SubRegion(Roi):
     def __init__(self, slot, start = None, stop = None, pslice = None):
         super(SubRegion,self).__init__(slot)
@@ -143,7 +145,7 @@ class SubRegion(Roi):
         self.start.insert(0,start)
         self.stop.insert(0,stop)
         return self
-        
+
 
     def expandByShape(self,shape,cIndex,tIndex):
         """
@@ -159,10 +161,10 @@ class SubRegion(Roi):
             tmp = shape
             shape = numpy.zeros(self.dim).astype(int)
             shape[:] = tmp
-        
+
         tmpStart = [int(x-s) for x,s in zip(self.start,shape)]
         tmpStop = [int(x+s) for x,s in zip(self.stop,shape)]
-        start = [int(max(t,i)) for t,i in zip(tmpStart,numpy.zeros_like(self.inputShape))]   
+        start = [int(max(t,i)) for t,i in zip(tmpStart,numpy.zeros_like(self.inputShape))]
         stop = [int(min(t,i)) for t,i in zip(tmpStop,self.inputShape)]
         start[cIndex] = cStart
         stop[cIndex] = cStop
@@ -172,7 +174,7 @@ class SubRegion(Roi):
         self.start = TinyVector(start)
         self.stop = TinyVector(stop)
         return self
-        
+
     def adjustRoi(self,halo):
         if type(halo) != list:
             halo = [halo]*len(self.start)

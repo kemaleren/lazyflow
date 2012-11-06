@@ -140,18 +140,18 @@ class OpMultiArraySlicer(Operator):
             inputTags = self.Input.meta.axistags
             flag = self.AxisFlag.value
             axisSlice = reducedKey.pop( inputTags.index(flag) )
-            
+
             axisStart, axisStop = axisSlice.start, axisSlice.stop
             if axisStart is None:
                 axisStart = 0
             if axisStop is None:
                 axisStop = len( self.Slices )
-    
+
             for i in range(axisStart, axisStop):
                 self.Slices[i].setDirty( reducedKey )
         else:
             assert False, "Unknown dirty input slot"
-        
+
 
 class OpMultiArraySlicer2(Operator):
     """
@@ -211,7 +211,7 @@ class OpMultiArraySlicer2(Operator):
             indexAxis = axistags.index(flag)
             inshape = self.inputs["Input"].meta.shape
             return list( range( inshape[indexAxis] ) )
-    
+
     def execute(self, slot, subindex, rroi, result):
         key = roiToSlice(rroi.start, rroi.stop)
         index = subindex[0]
@@ -278,6 +278,7 @@ class OpMultiArrayStacker(Operator):
         axistype = axisType(flag)
         axisindex = self.inputs["AxisIndex"].value
 
+        inTagKeys = []
         for inSlot in self.inputs["Images"]:
             inTagKeys = [ax.key for ax in inSlot.meta.axistags]
             if inSlot.partner is not None:
@@ -298,6 +299,7 @@ class OpMultiArrayStacker(Operator):
             newshape = list(self.inputs["Images"][0].meta.shape)
             if flag in inTagKeys:
                 #here we assume that all axis are present
+                axisindex = self.outputs["Output"].meta.axistags.index(flag)
                 newshape[axisindex]=c
             else:
                 newshape.insert(axisindex, c)
@@ -366,6 +368,9 @@ class OpMultiArrayStacker(Operator):
     def propagateDirty(self, inputSlot, subindex, roi):
         if inputSlot == self.AxisFlag or inputSlot == self.AxisIndex:
             self.Output.setDirty( slice(None) )
+        elif inputSlot==self.Images:
+            #FIXME: add normal handling here
+            self.Output.setDirty(slice(None))
         else:
             assert False, "Unknown input slot."
 
@@ -414,7 +419,7 @@ class OpSubRegion(Operator):
 
     inputSlots = [InputSlot("Input"), InputSlot("Start"), InputSlot("Stop"), InputSlot("propagate_dirty", value = True)]
     outputSlots = [OutputSlot("Output")]
-    
+
     def __init__(self, *args, **kwargs):
         Operator.__init__(self, *args, **kwargs)
         self._propagate_dirty = False
@@ -428,7 +433,7 @@ class OpSubRegion(Operator):
         assert len(start) == len(self.inputs["Input"].meta.shape)
         assert len(start) == len(stop)
         assert (numpy.array(stop)>= numpy.array(start)).all()
-    
+
         temp = tuple(numpy.array(stop) - numpy.array(start))
         #drop singleton dimensions
         outShape = ()
@@ -437,7 +442,7 @@ class OpSubRegion(Operator):
                 outShape = outShape + (e,)
 
         self.Output.meta.assignFrom(self.Input.meta)
-        self.Output.meta.shape = outShape        
+        self.Output.meta.shape = outShape
 
     def execute(self, slot, subindex, roi, result):
         key = roiToSlice(roi.start,roi.stop)
@@ -477,7 +482,7 @@ class OpSubRegion(Operator):
             # Translate the input key to a small subregion key
             smallstart = roi.start - self.Start.value
             smallstop = roi.stop - self.Start.value
-            
+
             # Clip to our output shape
             smallstart = numpy.maximum(smallstart, 0)
             smallstop = numpy.minimum(smallstop, self.Output.meta.shape)
@@ -516,7 +521,7 @@ class OpMultiArrayMerger(Operator):
             else:
                 dranges = []
                 break
-        
+
         if len(dranges) > 0:
             fun = self.MergingFunction.value
             outRange = fun(dranges)
@@ -531,7 +536,7 @@ class OpMultiArrayMerger(Operator):
         data=[]
         for req in requests:
             data.append(req.wait())
-        
+
         fun=self.inputs["MergingFunction"].value
 
         return fun(data)
@@ -645,9 +650,9 @@ class OpMultiInputConcatenater(Operator):
         # We don't need to do this expensive rebuilding of the output list unless a new input list was added
         if self._numInputLists == len(self.Inputs):
             return
-        
+
         self._numInputLists = len(self.Inputs)
-            
+
         # First pass to determine output length
         totalOutputLength = 0
         for index, slot in enumerate( self.Inputs ):
@@ -683,15 +688,15 @@ class OpTransposeSlots(Operator):
     """
     Inputs = InputSlot(level=2)
     Outputs = OutputSlot(level=2)
-            
+
     def setupOutputs(self):
         minSize = None
         for i, mslot in enumerate( self.Inputs ):
             if minSize is None:
                 minSize = len(mslot)
             else:
-                minSize = min( minSize, len(mslot) ) 
-        
+                minSize = min( minSize, len(mslot) )
+
         self.Outputs.resize(minSize)
         for j, mslot in enumerate( self.Outputs ):
             mslot.resize( len(self.Inputs) )
@@ -706,39 +711,3 @@ class OpTransposeSlots(Operator):
         # Nothing to do here.
         # All outputs are directly connected to an input slot.
         pass
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
