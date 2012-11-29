@@ -24,6 +24,11 @@ except:
     from opColorizeLabels import OpColorizeLabels
     from opObjectFeatures import OpObjectFeatures
 
+    # necessary because we used a factory
+    from obsolete.vigraOperators import \
+        Op1ToMulti, Op5ToMulti, Op10ToMulti, \
+        Op20ToMulti, Op50ToMulti
+
     ops = itersubclasses(Operator)
     logger.debug("Loading default Operators...")
     loaded = ""

@@ -23,103 +23,84 @@ from functools import partial
 import logging
 logger = logging.getLogger(__name__)
 
+def zfill_num(n, stop):
+    """ Make int strings same length.
 
-class OpXToMulti(Operator):
+    >>> zfill_num(1, 100) # len('99') == 2
+    '01'
 
-    inputSlots = []
-    outputSlots = []
+    >>> zfill_num(1, 101) # len('100') == 3
+    '001'
 
-    def setupOutputs(self):
-        length = 0
-        for slot in self.inputs.values():
-            if slot.ready():
-                length += 1
-
-        self.outputs["Outputs"].resize(length)
-
-        i = 0
-        for sname in sorted(self.inputs.keys()):
-            slot = self.inputs[sname]
-            if slot.ready():
-                self.outputs["Outputs"][i].meta.assignFrom( slot.meta )
-                i += 1
-
-    def execute(self, slot, subindex, roi, result):
-        key = roiToSlice(roi.start, roi.stop)
-        index = subindex[0]
-        i = 0
-        for sname in sorted(self.inputs.keys()):
-            slot = self.inputs[sname]
-            if slot.ready():
-                if i == index:
-                    return slot[key].allocate().wait()
-                i += 1
-
-    def propagateDirty(self, islot, subindex, roi):
-        i = 0
-        for sname in sorted(self.inputs.keys()):
-            slot = self.inputs[sname]
-            if slot == islot:
-                self.outputs["Outputs"][i].setDirty(roi)
-                break
-            if slot.ready():
-                self.outputs["Outputs"][i].meta.assignFrom( slot.meta )
-                i += 1
-
-    def setInSlot(self, slot, subindex, roi, value):
-        # Nothing to do here: All inputs are directly connected to an input slot.
-        pass
-
-class Op1ToMulti(OpXToMulti):
-    name = "1 Element to Multislot"
-    category = "Misc"
-
-    inputSlots = []
-    for i in xrange(1):
-        inputSlots.append(InputSlot("Input"))
-    outputSlots = [OutputSlot("Outputs", level=1)]
-
-class Op5ToMulti(OpXToMulti):
-    name = "5 Elements to Multislot"
-    category = "Misc"
-
-    inputSlots = []
-    for i in xrange(5):
-        inputSlots.append(InputSlot("Input%.1d"%(i), optional = True))
-    outputSlots = [OutputSlot("Outputs", level=1)]
+    """
+    return str(n).zfill(len(str(stop - 1)))
 
 
-class Op10ToMulti(OpXToMulti):
-    name = "10 Elements to Multislot"
-    category = "Misc"
+def makeOpXToMulti(n):
+    """A factory for creating OpXToMulti classes."""
+    assert n > 0
 
-    inputSlots = []
-    for i in xrange(10):
-        inputSlots.append(InputSlot("Input%.1d"%(i), optional = True))
-    outputSlots = [OutputSlot("Outputs", level=1)]
+    class OpXToMulti(Operator):
+        category = "Misc"
+        name = "{} Element to Multislot".format(n)
+
+        if n == 1:
+            inputSlots = [InputSlot('Input')]
+        else:
+            names = list("Input{}".format(zfill_num(i, n))
+                         for i in range(n))
+            inputSlots = list(InputSlot(name, optional=True)
+                                   for name in names)
+
+        outputSlots = [OutputSlot("Outputs", level=1)]
+
+        def _sorted_inputs(self, filterReady=False):
+            """Returns self.inputs.values() sorted by keys.
+
+            :param filterReady: only return slots that are ready.
+
+            """
+            keys = sorted(self.inputs.keys())
+            slots = list(self.inputs[k] for k in keys)
+            if filterReady:
+                slots = list(s for s in slots if s.ready())
+            return slots
+
+        def _do_assignfrom(self, inslots):
+            for inslot, outslot in zip(inslots, self.outputs['Outputs']):
+                outslot.meta.assignFrom(inslot.meta)
+
+        def setupOutputs(self):
+            inslots = self._sorted_inputs(filterReady=True)
+            self.outputs["Outputs"].resize(len(inslots))
+            self._do_assignfrom(inslots)
+
+        def execute(self, slot, subindex, roi, result):
+            key = roiToSlice(roi.start, roi.stop)
+            index = subindex[0]
+            inslots = self._sorted_inputs(filterReady=True)
+            if index < len(inslots):
+                return inslots[index][key].allocate().wait()
+
+        def propagateDirty(self, islot, subindex, roi):
+            inslots = self._sorted_inputs()
+            index = inslots.index(islot)
+            self.outputs["Outputs"][index].setDirty(roi)
+            readyslots = list(s for s in inslots[:index] if s.ready())
+            self._do_assignfrom(readyslots)
+
+        def setInSlot(self, slot, subindex, roi, value):
+            # Nothing to do here: All inputs are directly connected to an input slot.
+            pass
+
+    return OpXToMulti
 
 
-class Op20ToMulti(OpXToMulti):
-    name = "20 Elements to Multislot"
-    category = "Misc"
-
-    inputSlots = []
-    for i in xrange(20):
-        inputSlots.append(InputSlot("Input%.2d"%(i), optional = True))
-    outputSlots = [OutputSlot("Outputs", level=1)]
-
-
-
-
-class Op50ToMulti(OpXToMulti):
-
-    name = "N Elements to Multislot"
-    category = "Misc"
-
-    inputSlots = []
-    for i in xrange(50):
-        inputSlots.append(InputSlot("Input%.2d"%(i), optional = True))
-    outputSlots = [OutputSlot("Outputs", level=1)]
+Op1ToMulti = makeOpXToMulti(1)
+Op5ToMulti = makeOpXToMulti(5)
+Op10ToMulti = makeOpXToMulti(10)
+Op20ToMulti = makeOpXToMulti(20)
+Op50ToMulti = makeOpXToMulti(50)
 
 
 class OpPixelFeaturesPresmoothed(Operator):
