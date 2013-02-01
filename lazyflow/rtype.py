@@ -67,6 +67,8 @@ class Everything(Roi):
 class List(Roi):
     def __init__(self, slot, iterable=(), pslice=None):
         super(List, self).__init__(slot)
+        if isinstance(iterable, slice):
+            iterable = slicingtools.slice2list(iterable)
         self._l = list(iterable)
         if pslice is not None:
             print "pslice not none, but we are in a list!", pslice

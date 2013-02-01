@@ -102,6 +102,18 @@ def index2slice( slicing ):
             pure_sl[i] = slice(index, index + 1)
     return tuple(pure_sl)
 
+
+def slice2list(slc):
+    start = slc.start
+    stop = slc.stop
+    step = slc.step
+    if start is None:
+        return []
+    if stop is None:
+        return [start]
+    return range(start, stop, step)
+
+
 def intersection( lhs, rhs ):
     '''Calculate intersection between two slicings of same dimensions.
 
